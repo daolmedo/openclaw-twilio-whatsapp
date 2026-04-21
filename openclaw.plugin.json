@@ -1,0 +1,42 @@
+{
+  "id": "twilio-whatsapp",
+  "name": "Twilio WhatsApp",
+  "description": "WhatsApp channel via Twilio Business API (ISV/WABA)",
+  "version": "1.0.0",
+  "channels": ["twilio-whatsapp"],
+  "channelConfigs": {
+    "twilio-whatsapp": {
+      "label": "Twilio WhatsApp",
+      "description": "WhatsApp messaging via Twilio ISV Business Account",
+      "schema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "dmPolicy": { "type": "string" },
+          "allowFrom": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "accounts": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "accountSid": { "type": "string" },
+                "authToken": { "type": "string" },
+                "phoneNumber": { "type": "string" }
+              },
+              "required": ["accountSid", "authToken", "phoneNumber"]
+            }
+          }
+        }
+      }
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

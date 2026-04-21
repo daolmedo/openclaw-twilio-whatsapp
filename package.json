@@ -1,0 +1,33 @@
+{
+  "name": "@cody/openclaw-twilio-whatsapp",
+  "version": "1.0.0",
+  "description": "Twilio WhatsApp channel plugin for OpenClaw (Cody ISV)",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist",
+    "openclaw.plugin.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "twilio": "^5.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  },
+  "openclaw": {
+    "extensions": ["./dist/index.js"],
+    "channel": {
+      "id": "twilio-whatsapp",
+      "label": "Twilio WhatsApp"
+    },
+    "install": {
+      "minHostVersion": ">=2026.3.24-beta.2"
+    }
+  }
+}
