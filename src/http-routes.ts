@@ -2,13 +2,20 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { OpenClawPluginApi } from "openclaw/plugins/types.js";
 import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/direct-dm.js";
 import {
+  fetchRemoteMedia,
+  saveMediaBuffer,
+} from "openclaw/plugin-sdk/media-runtime.js";
+import {
   findTwilioAccountByPhoneNumber,
   normalizePhoneNumber,
+  type ResolvedTwilioAccount,
 } from "./accounts.js";
 import { parseTwilioWebhook, verifyTwilioSignature } from "./webhook.js";
 import { sendTwilioWhatsappMessage } from "./send.js";
 import type { StoredTwilioRuntime } from "./runtime-store.js";
 import { getRuntimeForPhoneNumber } from "./runtime-store.js";
+
+const MEDIA_MAX_BYTES = 16 * 1024 * 1024; // 16MB (Twilio's WhatsApp media limit)
 
 async function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -29,6 +36,45 @@ function twimlError(res: ServerResponse, status: number, message: string): void 
   res.end(
     `<?xml version="1.0" encoding="UTF-8"?><Response><Message>${message}</Message></Response>`,
   );
+}
+
+type ResolvedMedia = {
+  path: string;
+  contentType: string;
+};
+
+// Twilio media URLs require Basic auth (accountSid:authToken)
+async function downloadTwilioMedia(
+  url: string,
+  account: ResolvedTwilioAccount,
+): Promise<ResolvedMedia | null> {
+  try {
+    const authHeader =
+      "Basic " + Buffer.from(`${account.accountSid}:${account.authToken}`).toString("base64");
+
+    const { buffer, contentType } = await fetchRemoteMedia({
+      url,
+      fetchImpl: (input, init) =>
+        fetch(input, {
+          ...init,
+          headers: {
+            ...(init?.headers as Record<string, string> | undefined),
+            Authorization: authHeader,
+          },
+        }),
+      maxBytes: MEDIA_MAX_BYTES,
+      readIdleTimeoutMs: 30_000,
+    });
+
+    const saved = await saveMediaBuffer(buffer, contentType, "inbound", MEDIA_MAX_BYTES);
+    return {
+      path: saved.path,
+      contentType: saved.contentType ?? contentType ?? "application/octet-stream",
+    };
+  } catch (err) {
+    console.error("[twilio-whatsapp] Failed to download media:", url, err);
+    return null;
+  }
 }
 
 export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
@@ -88,11 +134,32 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
         return true;
       }
 
-      const bodyForAgent = hasMedia
-        ? [messageText, ...fields.media.map((m) => `[Media: ${m.url}]`)].filter(Boolean).join("\n")
-        : messageText;
-
+      // Respond to Twilio immediately — media download happens async
       twimlOk(res);
+
+      // Download all media attachments in parallel
+      const resolvedMedia: ResolvedMedia[] = [];
+      if (hasMedia) {
+        const results = await Promise.all(
+          fields.media.map((m) => downloadTwilioMedia(m.url, account)),
+        );
+        for (const r of results) {
+          if (r) resolvedMedia.push(r);
+        }
+      }
+
+      // Build media context fields (mirrors Telegram pattern)
+      const mediaContext =
+        resolvedMedia.length > 0
+          ? {
+              MediaPath: resolvedMedia[0].path,
+              MediaUrl: resolvedMedia[0].path,
+              MediaType: resolvedMedia[0].contentType,
+              MediaPaths: resolvedMedia.map((m) => m.path),
+              MediaUrls: resolvedMedia.map((m) => m.path),
+              MediaTypes: resolvedMedia.map((m) => m.contentType),
+            }
+          : {};
 
       dispatchInboundDirectDmWithRuntime({
         cfg: stored.cfg,
@@ -106,10 +173,11 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
         recipientAddress,
         conversationLabel,
         rawBody: messageText,
-        bodyForAgent,
+        bodyForAgent: messageText || undefined,
         messageId: fields.messageSid,
         timestamp: Date.now(),
         commandAuthorized: true,
+        extraContext: mediaContext,
         deliver: async (payload) => {
           const text = payload.text ?? "";
           const mediaUrl = payload.mediaUrl ?? payload.mediaUrls?.[0];
