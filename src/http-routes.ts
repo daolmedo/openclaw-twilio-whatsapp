@@ -111,8 +111,8 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
         timestamp: Date.now(),
         commandAuthorized: true,
         deliver: async (payload) => {
-          const text = "text" in payload ? (payload.text ?? "") : "";
-          const mediaUrl = "mediaUrl" in payload ? (payload.mediaUrl as string | undefined) : undefined;
+          const text = payload.text ?? "";
+          const mediaUrl = payload.mediaUrl ?? payload.mediaUrls?.[0];
           if (!text && !mediaUrl) return;
           await sendTwilioWhatsappMessage({
             accountSid: account.accountSid,
