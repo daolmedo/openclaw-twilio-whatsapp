@@ -1,6 +1,6 @@
 {
   "name": "@daolmedo/openclaw-twilio-whatsapp",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Twilio WhatsApp channel plugin for OpenClaw (Cody ISV)",
   "type": "module",
   "exports": {
@@ -30,7 +30,7 @@
       "label": "Twilio WhatsApp"
     },
     "install": {
-      "minHostVersion": ">=2026.3.24-beta.2"
+      "minHostVersion": ">=2026.3.24"
     }
   }
 }
