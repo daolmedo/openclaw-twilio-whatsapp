@@ -1,4 +1,4 @@
-import { defineChannelPluginEntry } from "openclaw/plugin-sdk/channel-core.js";
+import { defineChannelPluginEntry } from "openclaw/plugin-sdk/channel-core";
 import { twilioWhatsappPlugin } from "./src/channel.js";
 import { registerTwilioWhatsappHttpRoutes } from "./src/http-routes.js";
 

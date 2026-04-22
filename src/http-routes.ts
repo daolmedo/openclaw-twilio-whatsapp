@@ -1,10 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { OpenClawPluginApi } from "openclaw/plugins/types.js";
-import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/direct-dm.js";
+import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/direct-dm";
 import {
   fetchRemoteMedia,
   saveMediaBuffer,
-} from "openclaw/plugin-sdk/media-runtime.js";
+} from "openclaw/plugin-sdk/media-runtime";
 import {
   findTwilioAccountByPhoneNumber,
   normalizePhoneNumber,
