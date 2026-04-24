@@ -2,7 +2,6 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import type { OpenClawPluginApi } from "openclaw/plugins/types.js";
 import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/direct-dm";
 import {
-  fetchRemoteMedia,
   saveMediaBuffer,
 } from "openclaw/plugin-sdk/media-runtime";
 import {
@@ -52,24 +51,27 @@ async function downloadTwilioMedia(
     const authHeader =
       "Basic " + Buffer.from(`${account.accountSid}:${account.authToken}`).toString("base64");
 
-    const { buffer, contentType } = await fetchRemoteMedia({
-      url,
-      fetchImpl: (input, init) =>
-        fetch(input, {
-          ...init,
-          headers: {
-            ...(init?.headers as Record<string, string> | undefined),
-            Authorization: authHeader,
-          },
-        }),
-      maxBytes: MEDIA_MAX_BYTES,
-      readIdleTimeoutMs: 30_000,
+    const response = await fetch(url, {
+      headers: { Authorization: authHeader },
+      signal: AbortSignal.timeout(30_000),
     });
 
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} fetching media`);
+    }
+
+    const contentType = response.headers.get("content-type") ?? "application/octet-stream";
+    const arrayBuffer = await response.arrayBuffer();
+
+    if (arrayBuffer.byteLength > MEDIA_MAX_BYTES) {
+      throw new Error(`Media too large: ${arrayBuffer.byteLength} bytes`);
+    }
+
+    const buffer = Buffer.from(arrayBuffer);
     const saved = await saveMediaBuffer(buffer, contentType, "inbound", MEDIA_MAX_BYTES);
     return {
       path: saved.path,
-      contentType: saved.contentType ?? contentType ?? "application/octet-stream",
+      contentType: saved.contentType ?? contentType,
     };
   } catch (err) {
     console.error("[twilio-whatsapp] Failed to download media:", url, err);
