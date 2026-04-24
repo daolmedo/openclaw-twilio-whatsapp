@@ -12,6 +12,7 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
+          "enabled": { "type": "boolean" },
           "dmPolicy": { "type": "string" },
           "allowFrom": {
             "type": "array",
