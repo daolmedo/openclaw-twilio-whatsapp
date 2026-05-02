@@ -11,6 +11,7 @@ import {
 } from "./accounts.js";
 import { parseTwilioWebhook, verifyTwilioSignature } from "./webhook.js";
 import { sendTwilioWhatsappMessage } from "./send.js";
+import { startTypingKeepalive } from "./typing.js";
 import type { StoredTwilioRuntime } from "./runtime-store.js";
 import { getRuntimeForPhoneNumber } from "./runtime-store.js";
 
@@ -163,6 +164,14 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
             }
           : {};
 
+      const stopTyping = fields.messageSid
+        ? startTypingKeepalive({
+            accountSid: account.accountSid,
+            authToken: account.authToken,
+            messageId: fields.messageSid,
+          })
+        : () => {};
+
       dispatchInboundDirectDmWithRuntime({
         cfg: stored.cfg,
         runtime: { channel: stored.channelRuntime },
@@ -181,6 +190,7 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
         commandAuthorized: true,
         extraContext: mediaContext,
         deliver: async (payload) => {
+          stopTyping();
           const text = payload.text ?? "";
           const mediaUrl = payload.mediaUrl ?? payload.mediaUrls?.[0];
           if (!text && !mediaUrl) return;
@@ -197,9 +207,11 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
           console.error("[twilio-whatsapp] Session record error:", err);
         },
         onDispatchError: (err, info) => {
+          stopTyping();
           console.error(`[twilio-whatsapp] Dispatch error (${info.kind}):`, err);
         },
       }).catch((err) => {
+        stopTyping();
         console.error("[twilio-whatsapp] Unhandled dispatch error:", err);
       });
 
