@@ -184,9 +184,11 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
             cfg: stored.cfg,
             agentDir,
           });
+          appendFileSync("/tmp/twilio-debug.log", JSON.stringify({ event: "result", transcript: transcript ?? null }) + "\n");
           console.log("[twilio-whatsapp] Transcription result:", transcript);
           bodyForAgent = transcript || messageText || "<media:audio>";
         } catch (err) {
+          appendFileSync("/tmp/twilio-debug.log", JSON.stringify({ event: "error", err: String(err) }) + "\n");
           console.error("[twilio-whatsapp] Audio transcription failed:", err);
           bodyForAgent = messageText || "<media:audio>";
         }
