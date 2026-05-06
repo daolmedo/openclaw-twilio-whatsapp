@@ -1,9 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { appendFileSync } from "node:fs";
 import type { OpenClawPluginApi } from "openclaw/plugins/types.js";
 import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/direct-dm";
 import { saveMediaBuffer } from "openclaw/plugin-sdk/media-runtime";
-import { transcribeFirstAudio } from "openclaw/plugin-sdk/media-runtime";
 import {
   findTwilioAccountByPhoneNumber,
   normalizePhoneNumber,
@@ -164,31 +162,19 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
             }
           : {};
 
-      // Preflight audio transcription — mirrors Telegram pattern
+      // Preflight audio transcription
       let bodyForAgent: string | undefined = messageText || undefined;
-      const hasAudio = resolvedMedia.some((m) => m.contentType.startsWith("audio/"));
-      if (hasAudio) {
-        console.log("[twilio-whatsapp] Audio detected, attempting transcription. Media:", resolvedMedia.map((m) => `${m.path} (${m.contentType})`));
+      const firstAudio = resolvedMedia.find((m) => m.contentType.startsWith("audio/"));
+      if (firstAudio) {
         try {
-          const cfg = stored.cfg as any;
-          const agentId = cfg.bindings?.find(
-            (b: any) => b.match?.channel === "twilio-whatsapp" && b.match?.accountId === stored.accountId
-          )?.agentId;
-          const agentDir: string | undefined = cfg.agents?.list?.find((a: any) => a.id === agentId)?.agentDir;
-          appendFileSync("/tmp/twilio-debug.log", JSON.stringify({ bindings: cfg.bindings, accountId: stored.accountId, agentId, agentDir }) + "\n");
-          const transcript = await transcribeFirstAudio({
-            ctx: {
-              MediaPaths: resolvedMedia.map((m) => m.path),
-              MediaTypes: resolvedMedia.map((m) => m.contentType),
-            },
-            cfg: stored.cfg,
-            agentDir,
+          const { text } = await api.runtime.mediaUnderstanding.transcribeAudioFile({
+            filePath: firstAudio.path,
+            cfg: api.config,
+            mime: firstAudio.contentType,
           });
-          appendFileSync("/tmp/twilio-debug.log", JSON.stringify({ event: "result", transcript: transcript ?? null }) + "\n");
-          console.log("[twilio-whatsapp] Transcription result:", transcript);
-          bodyForAgent = transcript || messageText || "<media:audio>";
+          console.log("[twilio-whatsapp] Transcription result:", text);
+          bodyForAgent = text || messageText || "<media:audio>";
         } catch (err) {
-          appendFileSync("/tmp/twilio-debug.log", JSON.stringify({ event: "error", err: String(err) }) + "\n");
           console.error("[twilio-whatsapp] Audio transcription failed:", err);
           bodyForAgent = messageText || "<media:audio>";
         }
