@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { appendFileSync } from "node:fs";
 import type { OpenClawPluginApi } from "openclaw/plugins/types.js";
 import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/direct-dm";
 import { saveMediaBuffer } from "openclaw/plugin-sdk/media-runtime";
@@ -174,6 +175,7 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
             (b: any) => b.match?.channel === "twilio-whatsapp" && b.match?.accountId === stored.accountId
           )?.agentId;
           const agentDir: string | undefined = cfg.agents?.list?.find((a: any) => a.id === agentId)?.agentDir;
+          appendFileSync("/tmp/twilio-debug.log", JSON.stringify({ bindings: cfg.bindings, accountId: stored.accountId, agentId, agentDir }) + "\n");
           const transcript = await transcribeFirstAudio({
             ctx: {
               MediaPaths: resolvedMedia.map((m) => m.path),
