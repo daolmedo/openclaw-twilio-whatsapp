@@ -1,7 +1,10 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugins/types.js";
 import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/direct-dm";
 import { saveMediaBuffer } from "openclaw/plugin-sdk/media-runtime";
+import { transcribeOpenAiCompatibleAudio } from "openclaw/plugin-sdk/media-understanding";
 import {
   findTwilioAccountByPhoneNumber,
   normalizePhoneNumber,
@@ -167,10 +170,35 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
       const firstAudio = resolvedMedia.find((m) => m.contentType.startsWith("audio/"));
       if (firstAudio) {
         try {
-          const { text } = await api.runtime.mediaUnderstanding.transcribeAudioFile({
-            filePath: firstAudio.path,
+          const cfgAny = stored.cfg as any;
+          const agentId = cfgAny.bindings?.find(
+            (b: any) => b.match?.channel === "twilio-whatsapp" && b.match?.accountId === stored.accountId,
+          )?.agentId;
+          const agentDir: string | undefined = cfgAny.agents?.list?.find(
+            (a: any) => a.id === agentId,
+          )?.agentDir;
+
+          const auth = await api.runtime.modelAuth.resolveApiKeyForProvider({
+            provider: "openai",
             cfg: api.config,
+            agentDir,
+          });
+          if (!auth.apiKey) throw new Error("No OpenAI API key available for audio transcription");
+
+          const audioBuffer = await readFile(firstAudio.path);
+          const model =
+            cfgAny.tools?.media?.audio?.models?.find((m: any) => m.provider === "openai")?.model ??
+            "gpt-4o-mini-transcribe";
+          const timeoutMs = (cfgAny.tools?.media?.audio?.timeoutSeconds ?? 120) * 1000;
+
+          const { text } = await transcribeOpenAiCompatibleAudio({
+            buffer: audioBuffer,
+            fileName: path.basename(firstAudio.path),
             mime: firstAudio.contentType,
+            apiKey: auth.apiKey,
+            defaultBaseUrl: "https://api.openai.com/v1",
+            defaultModel: model,
+            timeoutMs,
           });
           console.log("[twilio-whatsapp] Transcription result:", text);
           bodyForAgent = text || messageText || "<media:audio>";
