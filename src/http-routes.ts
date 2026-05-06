@@ -186,19 +186,15 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
           if (!auth.apiKey) throw new Error("No OpenAI API key available for audio transcription");
 
           const audioBuffer = await readFile(firstAudio.path);
-          const model =
-            cfgAny.tools?.media?.audio?.models?.find((m: any) => m.provider === "openai")?.model ??
-            "gpt-4o-mini-transcribe";
-          const timeoutMs = (cfgAny.tools?.media?.audio?.timeoutSeconds ?? 120) * 1000;
-
           const { text } = await transcribeOpenAiCompatibleAudio({
             buffer: audioBuffer,
             fileName: path.basename(firstAudio.path),
             mime: firstAudio.contentType,
             apiKey: auth.apiKey,
+            model: "gpt-4o-mini-transcribe",
             defaultBaseUrl: "https://api.openai.com/v1",
-            defaultModel: model,
-            timeoutMs,
+            defaultModel: "gpt-4o-mini-transcribe",
+            timeoutMs: 120_000,
           });
           console.log("[twilio-whatsapp] Transcription result:", text);
           bodyForAgent = text || messageText || "<media:audio>";
