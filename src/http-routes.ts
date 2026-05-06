@@ -4,7 +4,6 @@ import path from "node:path";
 import type { OpenClawPluginApi } from "openclaw/plugins/types.js";
 import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/direct-dm";
 import { saveMediaBuffer } from "openclaw/plugin-sdk/media-runtime";
-import { transcribeOpenAiCompatibleAudio } from "openclaw/plugin-sdk/media-understanding";
 import {
   findTwilioAccountByPhoneNumber,
   normalizePhoneNumber,
@@ -186,16 +185,24 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
           if (!auth.apiKey) throw new Error("No OpenAI API key available for audio transcription");
 
           const audioBuffer = await readFile(firstAudio.path);
-          const { text } = await transcribeOpenAiCompatibleAudio({
-            buffer: audioBuffer,
-            fileName: path.basename(firstAudio.path),
-            mime: firstAudio.contentType,
-            apiKey: auth.apiKey,
-            model: "gpt-4o-mini-transcribe",
-            defaultBaseUrl: "https://api.openai.com/v1",
-            defaultModel: "gpt-4o-mini-transcribe",
-            timeoutMs: 120_000,
+          const form = new FormData();
+          form.append(
+            "file",
+            new Blob([audioBuffer], { type: firstAudio.contentType }),
+            path.basename(firstAudio.path),
+          );
+          form.append("model", "gpt-4o-mini-transcribe");
+          const transcribeRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+            method: "POST",
+            headers: { Authorization: `Bearer ${auth.apiKey}` },
+            body: form,
+            signal: AbortSignal.timeout(120_000),
           });
+          if (!transcribeRes.ok) {
+            const errBody = await transcribeRes.text();
+            throw new Error(`OpenAI transcription HTTP ${transcribeRes.status}: ${errBody}`);
+          }
+          const { text } = (await transcribeRes.json()) as { text: string };
           console.log("[twilio-whatsapp] Transcription result:", text);
           bodyForAgent = text || messageText || "<media:audio>";
         } catch (err) {
