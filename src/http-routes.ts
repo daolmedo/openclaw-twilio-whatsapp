@@ -1,9 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { OpenClawPluginApi } from "openclaw/plugins/types.js";
 import { dispatchInboundDirectDmWithRuntime } from "openclaw/plugin-sdk/direct-dm";
-import {
-  saveMediaBuffer,
-} from "openclaw/plugin-sdk/media-runtime";
+import { saveMediaBuffer } from "openclaw/plugin-sdk/media-runtime";
+import { transcribeFirstAudio } from "openclaw/plugin-sdk/media-runtime";
 import {
   findTwilioAccountByPhoneNumber,
   normalizePhoneNumber,
@@ -164,6 +163,33 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
             }
           : {};
 
+      // Preflight audio transcription — mirrors Telegram pattern
+      let bodyForAgent: string | undefined = messageText || undefined;
+      const hasAudio = resolvedMedia.some((m) => m.contentType.startsWith("audio/"));
+      if (hasAudio) {
+        console.log("[twilio-whatsapp] Audio detected, attempting transcription. Media:", resolvedMedia.map((m) => `${m.path} (${m.contentType})`));
+        try {
+          const cfg = stored.cfg as any;
+          const agentId = cfg.bindings?.find(
+            (b: any) => b.match?.channel === "twilio-whatsapp" && b.match?.accountId === stored.accountId
+          )?.agentId;
+          const agentDir: string | undefined = cfg.agents?.list?.find((a: any) => a.id === agentId)?.agentDir;
+          const transcript = await transcribeFirstAudio({
+            ctx: {
+              MediaPaths: resolvedMedia.map((m) => m.path),
+              MediaTypes: resolvedMedia.map((m) => m.contentType),
+            },
+            cfg: stored.cfg,
+            agentDir,
+          });
+          console.log("[twilio-whatsapp] Transcription result:", transcript);
+          bodyForAgent = transcript || messageText || "<media:audio>";
+        } catch (err) {
+          console.error("[twilio-whatsapp] Audio transcription failed:", err);
+          bodyForAgent = messageText || "<media:audio>";
+        }
+      }
+
       const stopTyping = fields.messageSid
         ? startTypingKeepalive({
             accountSid: account.accountSid,
@@ -184,7 +210,7 @@ export function registerTwilioWhatsappHttpRoutes(api: OpenClawPluginApi): void {
         recipientAddress,
         conversationLabel,
         rawBody: messageText,
-        bodyForAgent: messageText || undefined,
+        bodyForAgent,
         messageId: fields.messageSid,
         timestamp: Date.now(),
         commandAuthorized: true,
