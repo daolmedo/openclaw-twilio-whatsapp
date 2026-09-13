@@ -1,11 +1,8 @@
-import type { OpenClawConfig } from "openclaw/channels/plugins/types.js";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
 
 export type StoredTwilioRuntime = {
   cfg: OpenClawConfig;
   accountId: string;
-  channelRuntime: NonNullable<
-    import("openclaw/channels/plugins/types.adapters.js").ChannelGatewayContext["channelRuntime"]
-  >;
 };
 
 const phoneToRuntime = new Map<string, StoredTwilioRuntime>();

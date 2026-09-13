@@ -1,11 +1,14 @@
-import type { ChannelPlugin } from "openclaw/channels/plugins/types.js";
+import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
 import {
   listTwilioAccountIds,
   normalizePhoneNumber,
   resolveTwilioAccount,
   type ResolvedTwilioAccount,
 } from "./accounts.js";
-import { twilioWhatsappOutbound } from "./outbound-adapter.js";
+import {
+  twilioWhatsappMessageAdapter,
+  twilioWhatsappOutbound,
+} from "./outbound-adapter.js";
 import { clearRuntimeForPhoneNumber, setRuntimeForPhoneNumber } from "./runtime-store.js";
 
 export const twilioWhatsappPlugin: ChannelPlugin<ResolvedTwilioAccount> = {
@@ -18,8 +21,6 @@ export const twilioWhatsappPlugin: ChannelPlugin<ResolvedTwilioAccount> = {
     docsPath: "/channels/twilio-whatsapp",
     blurb: "WhatsApp messaging via Twilio Business API",
     markdownCapable: false,
-    showInSetup: true,
-    showConfigured: true,
   },
 
   capabilities: {
@@ -52,24 +53,16 @@ export const twilioWhatsappPlugin: ChannelPlugin<ResolvedTwilioAccount> = {
   },
 
   outbound: twilioWhatsappOutbound,
+  message: twilioWhatsappMessageAdapter,
 
   gateway: {
     async startAccount(ctx) {
       const account = ctx.account as ResolvedTwilioAccount;
       const phoneNumber = normalizePhoneNumber(account.phoneNumber);
 
-      if (!ctx.channelRuntime) {
-        console.error(
-          `[twilio-whatsapp] channelRuntime not provided for account ${ctx.accountId}. ` +
-            "Inbound dispatch will not work.",
-        );
-        return;
-      }
-
       setRuntimeForPhoneNumber(phoneNumber, {
         cfg: ctx.cfg,
         accountId: ctx.accountId,
-        channelRuntime: ctx.channelRuntime,
       });
 
       ctx.setStatus({

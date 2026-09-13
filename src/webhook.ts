@@ -7,6 +7,7 @@ export type ParsedTwilioWebhook = {
   waId: string;
   profileName: string;
   messageSid: string;
+  accountSid: string;
   media: Array<{ url: string; contentType: string }>;
   repliedToSid?: string;
 };
@@ -39,6 +40,7 @@ export function parseTwilioWebhook(rawBody: string): ParsedTwilioWebhook {
     waId: p["WaId"] ?? "",
     profileName: p["ProfileName"] ?? "",
     messageSid: p["MessageSid"] ?? "",
+    accountSid: p["AccountSid"] ?? "",
     media,
     repliedToSid: p["OriginalRepliedMessageSid"],
   };

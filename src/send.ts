@@ -1,8 +1,8 @@
 import twilio from "twilio";
 
-const MAX_BODY_LENGTH = 1550;
+export const MAX_BODY_LENGTH = 1550;
 
-function splitMessage(text: string): string[] {
+export function splitMessage(text: string): string[] {
   if (text.length <= MAX_BODY_LENGTH) return [text];
 
   const chunks: string[] = [];
@@ -27,21 +27,36 @@ export async function sendTwilioWhatsappMessage(opts: {
   body?: string;
   mediaUrl?: string;
 }): Promise<string> {
-  const client = twilio(opts.accountSid, opts.authToken);
+  const client = twilio(opts.accountSid, opts.authToken, { timeout: 30_000 });
   const from = opts.from.startsWith("whatsapp:") ? opts.from : `whatsapp:${opts.from}`;
   const to = opts.to.startsWith("whatsapp:") ? opts.to : `whatsapp:${opts.to}`;
 
   const chunks = opts.body ? splitMessage(opts.body) : [undefined];
   let lastSid = "";
 
-  for (const chunk of chunks) {
-    const msg = await client.messages.create({
-      from,
-      to,
-      ...(chunk ? { body: chunk } : {}),
-      ...(opts.mediaUrl ? { mediaUrl: [opts.mediaUrl] } : {}),
-    });
-    lastSid = msg.sid;
+  for (let i = 0; i < chunks.length; i += 1) {
+    const chunk = chunks[i];
+    console.log(
+      `[twilio-whatsapp] Twilio create start from=${from} to=${to} chunk=${i + 1}/${chunks.length} bodyChars=${chunk?.length ?? 0} media=${opts.mediaUrl ? "yes" : "no"}`,
+    );
+    try {
+      const msg = await client.messages.create({
+        from,
+        to,
+        ...(chunk ? { body: chunk } : {}),
+        ...(opts.mediaUrl ? { mediaUrl: [opts.mediaUrl] } : {}),
+      });
+      lastSid = msg.sid;
+      console.log(
+        `[twilio-whatsapp] Twilio create ok sid=${msg.sid} status=${msg.status} chunk=${i + 1}/${chunks.length}`,
+      );
+    } catch (err) {
+      console.error(
+        `[twilio-whatsapp] Twilio create failed chunk=${i + 1}/${chunks.length}:`,
+        err,
+      );
+      throw err;
+    }
   }
 
   return lastSid;

@@ -1,4 +1,4 @@
-import type { OpenClawConfig } from "openclaw/channels/plugins/types.js";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/channel-core";
 
 export type ResolvedTwilioAccount = {
   accountId: string;
@@ -13,13 +13,17 @@ type TwilioAccountEntry = {
   phoneNumber: string;
 };
 
-type TwilioChannelConfig = {
-  dmPolicy?: string;
-  allowFrom?: string[];
+export type TwilioDmPolicy = "pairing" | "allowlist" | "open" | "disabled";
+
+export type TwilioChannelConfig = {
+  dmPolicy?: TwilioDmPolicy;
+  allowFrom?: Array<string | number>;
   accounts?: Record<string, TwilioAccountEntry>;
 };
 
-const getChannelConfig = (cfg: OpenClawConfig): TwilioChannelConfig | undefined =>
+export const getTwilioChannelConfig = (
+  cfg: OpenClawConfig,
+): TwilioChannelConfig | undefined =>
   (cfg as Record<string, unknown>).channels &&
   ((cfg as Record<string, unknown>).channels as Record<string, unknown>)["twilio-whatsapp"]
     ? (((cfg as Record<string, unknown>).channels as Record<string, unknown>)[
@@ -28,7 +32,7 @@ const getChannelConfig = (cfg: OpenClawConfig): TwilioChannelConfig | undefined 
     : undefined;
 
 export function listTwilioAccountIds(cfg: OpenClawConfig): string[] {
-  const ch = getChannelConfig(cfg);
+  const ch = getTwilioChannelConfig(cfg);
   return Object.keys(ch?.accounts ?? {});
 }
 
@@ -36,7 +40,7 @@ export function resolveTwilioAccount(
   cfg: OpenClawConfig,
   accountId?: string | null,
 ): ResolvedTwilioAccount {
-  const ch = getChannelConfig(cfg);
+  const ch = getTwilioChannelConfig(cfg);
   const id = accountId ?? "default";
   const entry = ch?.accounts?.[id];
   if (!entry) {
@@ -57,7 +61,7 @@ export function findTwilioAccountByPhoneNumber(
   cfg: OpenClawConfig,
   phoneNumber: string,
 ): ResolvedTwilioAccount | undefined {
-  const ch = getChannelConfig(cfg);
+  const ch = getTwilioChannelConfig(cfg);
   if (!ch?.accounts) return undefined;
   for (const [id, entry] of Object.entries(ch.accounts)) {
     const normalized = normalizePhoneNumber(entry.phoneNumber);
