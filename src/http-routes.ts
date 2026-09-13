@@ -83,6 +83,7 @@ type PendingMediaItem = TwilioDispatchParams & {
 
 type PendingMediaBatch = {
   items: PendingMediaItem[];
+  firstReceivedAt: number;
   timer?: ReturnType<typeof setTimeout>;
 };
 
@@ -93,6 +94,29 @@ function resolveMediaBatchFlushMs(): number {
   const raw = Number(process.env.TWILIO_WHATSAPP_MEDIA_BATCH_FLUSH_MS);
   if (Number.isFinite(raw) && raw >= 0) return Math.min(raw, 60_000);
   return 3_000;
+}
+
+function resolveMediaBatchInitialWaitMs(): number {
+  const rawValue = process.env.TWILIO_WHATSAPP_MEDIA_BATCH_INITIAL_WAIT_MS;
+  const raw = Number(rawValue);
+  if (rawValue !== undefined && Number.isFinite(raw) && raw >= 0) {
+    return Math.min(raw, 60_000);
+  }
+
+  // Preserve the old behavior for operators who explicitly configured the
+  // original flush setting. New/default installs wait longer for a possible
+  // sibling webhook because Twilio sends a WhatsApp media group as separate
+  // inbound messages and does not expose a documented group identifier.
+  if (process.env.TWILIO_WHATSAPP_MEDIA_BATCH_FLUSH_MS !== undefined) {
+    return resolveMediaBatchFlushMs();
+  }
+  return 15_000;
+}
+
+function resolveMediaBatchMaxWaitMs(): number {
+  const raw = Number(process.env.TWILIO_WHATSAPP_MEDIA_BATCH_MAX_WAIT_MS);
+  if (Number.isFinite(raw) && raw >= 0) return Math.min(raw, 60_000);
+  return Math.min(resolveMediaBatchInitialWaitMs() + resolveMediaBatchFlushMs(), 60_000);
 }
 
 function resolveMediaBatchMaxItems(): number {
@@ -189,9 +213,16 @@ function armBatchTimer(
   batch: PendingMediaBatch,
 ): void {
   stopBatchTimer(batch);
+  const batchAgeMs = Math.max(0, Date.now() - batch.firstReceivedAt);
+  const desiredWaitMs =
+    batch.items.length === 1
+      ? resolveMediaBatchInitialWaitMs()
+      : resolveMediaBatchFlushMs();
+  const remainingMaxWaitMs = Math.max(0, resolveMediaBatchMaxWaitMs() - batchAgeMs);
+  const waitMs = Math.min(desiredWaitMs, remainingMaxWaitMs);
   batch.timer = setTimeout(() => {
     void flushPendingMediaBatch(api, dispatchInbound, key, "timer");
-  }, resolveMediaBatchFlushMs());
+  }, waitMs);
   batch.timer.unref?.();
 }
 
@@ -246,7 +277,7 @@ function queueMediaBatch(
   return new Promise<void>((resolve, reject) => {
     let batch = pendingMediaByConversation.get(key);
     if (!batch) {
-      batch = { items: [] };
+      batch = { items: [], firstReceivedAt: item.receivedAt };
       pendingMediaByConversation.set(key, batch);
     }
     batch.items.push({ ...item, resolve, reject });

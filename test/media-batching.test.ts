@@ -37,7 +37,11 @@ class FakeResponse {
 
 test("batches sequential Twilio media webhooks and retains both route leases", async () => {
   const previousFlushMs = process.env.TWILIO_WHATSAPP_MEDIA_BATCH_FLUSH_MS;
-  process.env.TWILIO_WHATSAPP_MEDIA_BATCH_FLUSH_MS = "40";
+  const previousInitialWaitMs = process.env.TWILIO_WHATSAPP_MEDIA_BATCH_INITIAL_WAIT_MS;
+  const previousMaxWaitMs = process.env.TWILIO_WHATSAPP_MEDIA_BATCH_MAX_WAIT_MS;
+  process.env.TWILIO_WHATSAPP_MEDIA_BATCH_FLUSH_MS = "25";
+  process.env.TWILIO_WHATSAPP_MEDIA_BATCH_INITIAL_WAIT_MS = "5000";
+  process.env.TWILIO_WHATSAPP_MEDIA_BATCH_MAX_WAIT_MS = "6000";
 
   const accountSid = "AC123";
   const authToken = "test-auth-token";
@@ -120,6 +124,10 @@ test("batches sequential Twilio media webhooks and retains both route leases", a
   try {
     const first = invoke("first", "https://media.test/1");
     await new Promise((resolve) => setImmediate(resolve));
+    // The second webhook arrives after the short settle period that used to
+    // flush the first image as a separate agent turn.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    assert.equal(dispatches.length, 0);
     const second = invoke("second", "https://media.test/2");
     await new Promise((resolve) => setImmediate(resolve));
 
@@ -151,6 +159,16 @@ test("batches sequential Twilio media webhooks and retains both route leases", a
       delete process.env.TWILIO_WHATSAPP_MEDIA_BATCH_FLUSH_MS;
     } else {
       process.env.TWILIO_WHATSAPP_MEDIA_BATCH_FLUSH_MS = previousFlushMs;
+    }
+    if (previousInitialWaitMs === undefined) {
+      delete process.env.TWILIO_WHATSAPP_MEDIA_BATCH_INITIAL_WAIT_MS;
+    } else {
+      process.env.TWILIO_WHATSAPP_MEDIA_BATCH_INITIAL_WAIT_MS = previousInitialWaitMs;
+    }
+    if (previousMaxWaitMs === undefined) {
+      delete process.env.TWILIO_WHATSAPP_MEDIA_BATCH_MAX_WAIT_MS;
+    } else {
+      process.env.TWILIO_WHATSAPP_MEDIA_BATCH_MAX_WAIT_MS = previousMaxWaitMs;
     }
   }
 });
