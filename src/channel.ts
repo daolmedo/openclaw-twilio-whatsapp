@@ -1,6 +1,11 @@
-import type { ChannelPlugin } from "openclaw/plugin-sdk/channel-core";
+import {
+  buildChannelOutboundSessionRoute,
+  type ChannelOutboundSessionRouteParams,
+  type ChannelPlugin,
+} from "openclaw/plugin-sdk/channel-core";
 import {
   listTwilioAccountIds,
+  looksLikePhoneNumber,
   normalizePhoneNumber,
   resolveTwilioAccount,
   type ResolvedTwilioAccount,
@@ -10,6 +15,23 @@ import {
   twilioWhatsappOutbound,
 } from "./outbound-adapter.js";
 import { clearRuntimeForPhoneNumber, setRuntimeForPhoneNumber } from "./runtime-store.js";
+
+function resolveTwilioWhatsappOutboundSessionRoute(params: ChannelOutboundSessionRouteParams) {
+  const to = normalizePhoneNumber(params.resolvedTarget?.to ?? params.target);
+  if (!looksLikePhoneNumber(to)) return null;
+
+  return buildChannelOutboundSessionRoute({
+    cfg: params.cfg,
+    agentId: params.agentId,
+    channel: "twilio-whatsapp",
+    accountId: params.accountId,
+    recipientSessionExact: true,
+    peer: { kind: "direct", id: to },
+    chatType: "direct",
+    from: `whatsapp:${to}`,
+    to: `whatsapp:${to}`,
+  });
+}
 
 export const twilioWhatsappPlugin: ChannelPlugin<ResolvedTwilioAccount> = {
   id: "twilio-whatsapp",
@@ -49,6 +71,16 @@ export const twilioWhatsappPlugin: ChannelPlugin<ResolvedTwilioAccount> = {
 
     hasConfiguredState({ cfg }) {
       return listTwilioAccountIds(cfg).length > 0;
+    },
+  },
+
+  messaging: {
+    targetPrefixes: ["whatsapp"],
+    normalizeTarget: normalizePhoneNumber,
+    resolveOutboundSessionRoute: resolveTwilioWhatsappOutboundSessionRoute,
+    targetResolver: {
+      looksLikeId: (raw, normalized) => looksLikePhoneNumber(normalized ?? raw),
+      hint: "<+15551234567>",
     },
   },
 

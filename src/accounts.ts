@@ -73,5 +73,12 @@ export function findTwilioAccountByPhoneNumber(
 }
 
 export function normalizePhoneNumber(phone: string): string {
-  return phone.replace(/^whatsapp:/, "").replace(/\s+/g, "");
+  return phone
+    .trim()
+    .replace(/^(?:(?:twilio-whatsapp|whatsapp):)+/i, "")
+    .replace(/\s+/g, "");
+}
+
+export function looksLikePhoneNumber(phone: string): boolean {
+  return /^\+[1-9]\d{6,14}$/.test(normalizePhoneNumber(phone));
 }
