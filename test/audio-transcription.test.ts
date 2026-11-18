@@ -2,7 +2,7 @@ import { strict as assert } from "node:assert";
 import { EventEmitter } from "node:events";
 import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import path from "node:path";
+import * as path from "node:path";
 import { test } from "node:test";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { OpenClawPluginApi } from "openclaw/plugin-sdk/channel-core";
@@ -95,7 +95,8 @@ test("voice note is transcribed once and marked as transcribed for core", async 
       },
     },
   };
-  setRuntimeForPhoneNumber(toPhone, { cfg, accountId: "lisu" });
+  // Test cfg carries fields beyond the SDK config type (prompt on media models).
+  setRuntimeForPhoneNumber(toPhone, { cfg: cfg as never, accountId: "lisu" });
 
   const sttCalls: FormData[] = [];
   globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
@@ -104,7 +105,7 @@ test("voice note is transcribed once and marked as transcribed for core", async 
       return new Response(JSON.stringify({ text: "hola Cody" }), { status: 200 });
     }
     return new Response("{}", { status: 200 });
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
 
   let route:
     | { handler: (req: IncomingMessage, res: ServerResponse) => Promise<boolean> }
