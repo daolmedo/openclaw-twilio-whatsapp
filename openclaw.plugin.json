@@ -2,7 +2,7 @@
   "id": "twilio-whatsapp",
   "name": "Twilio WhatsApp",
   "description": "WhatsApp channel via Twilio Business API (ISV/WABA)",
-  "version": "1.1.27",
+  "version": "1.1.29",
   "channels": ["twilio-whatsapp"],
   "channelConfigs": {
     "twilio-whatsapp": {

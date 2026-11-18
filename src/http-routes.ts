@@ -300,6 +300,44 @@ function queueMediaBatch(
   });
 }
 
+const DEFAULT_OPENAI_STT_MODEL = "gpt-transcribe";
+
+type OpenAiSttConfig = { model: string; prompt?: string; language?: string };
+
+/**
+ * Uses the box's configured OpenAI audio model (tools.media.models entry with
+ * the "audio" capability, or the legacy tools.media.audio.models list) so the
+ * WhatsApp preflight transcribes with the same model/prompt as core.
+ */
+export function resolveOpenAiAudioModelConfig(cfg: unknown): OpenAiSttConfig {
+  type Entry = {
+    provider?: unknown;
+    model?: unknown;
+    prompt?: unknown;
+    language?: unknown;
+    capabilities?: unknown;
+  };
+  const media = (cfg as { tools?: { media?: { models?: unknown; audio?: { models?: unknown } } } })
+    ?.tools?.media;
+  const asEntries = (value: unknown): Entry[] =>
+    Array.isArray(value) ? value.filter((e): e is Entry => !!e && typeof e === "object") : [];
+  const candidates = [
+    ...asEntries(media?.models).filter(
+      (e) => Array.isArray(e.capabilities) && e.capabilities.includes("audio"),
+    ),
+    ...asEntries(media?.audio?.models),
+  ];
+  const entry = candidates.find(
+    (e) => (e.provider === undefined || e.provider === "openai") && typeof e.model === "string" && e.model.trim(),
+  );
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+  return {
+    model: str(entry?.model) ?? DEFAULT_OPENAI_STT_MODEL,
+    prompt: str(entry?.prompt),
+    language: str(entry?.language),
+  };
+}
+
 async function dispatchTwilioInbound(
   api: OpenClawPluginApi,
   dispatchInbound: DispatchInbound,
@@ -363,7 +401,10 @@ async function dispatchTwilioInbound(
         new Blob([audioBuffer], { type: firstAudio.contentType }),
         path.basename(firstAudio.path),
       );
-      form.append("model", "gpt-4o-mini-transcribe");
+      const sttConfig = resolveOpenAiAudioModelConfig(stored.cfg);
+      form.append("model", sttConfig.model);
+      if (sttConfig.prompt) form.append("prompt", sttConfig.prompt);
+      if (sttConfig.language) form.append("language", sttConfig.language);
       form.append("response_format", "json");
       const transcribeRes = await fetch("https://api.openai.com/v1/audio/transcriptions", {
         method: "POST",
@@ -383,6 +424,10 @@ async function dispatchTwilioInbound(
           : `[Audio]\nTranscript:\n${text}`;
         messageText = messageText ? `${messageText}\n\n${text}` : text;
         mediaContext.Transcript = text;
+        // Tell core's media-understanding pass this attachment is already
+        // transcribed; otherwise it runs STT again and the agent sees the
+        // transcript twice ("User text: [Audio] Transcript: …" + its own).
+        mediaContext.MediaTranscribedIndexes = [resolvedMedia.indexOf(firstAudio)];
       } else {
         bodyForAgent = messageText || "<media:audio>";
       }
